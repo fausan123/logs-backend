@@ -22,7 +22,7 @@ class User(AbstractUser):
         return f"{self.first_name} {self.last_name}"
 
 class Student(models.Model):
-    user = models.OneToOneField(User, related_name="students", on_delete=models.CASCADE)
+    user = models.OneToOneField(User, related_name="student", on_delete=models.CASCADE)
     dob = models.DateField()
     address = models.TextField()
     admission_number = models.IntegerField()
@@ -38,7 +38,7 @@ class Student(models.Model):
         return f"Student: {self.user.first_name}"
 
 class Faculty(models.Model):
-    user = models.OneToOneField(User, related_name="faculties", on_delete=models.CASCADE)
+    user = models.OneToOneField(User, related_name="faculty", on_delete=models.CASCADE)
     dob = models.DateField()
     address = models.TextField()
     phonenumber = models.CharField(max_length=10)
