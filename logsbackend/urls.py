@@ -7,9 +7,9 @@ from drf_yasg import openapi
 
 schema_view = get_schema_view(
    openapi.Info(
-      title="LOCUS API",
+      title="LOGS API",
       default_version='v1',
-      description="LOCUS API"
+      description="LOGS API"
    ),
    public=False,
    permission_classes=[permissions.AllowAny],
