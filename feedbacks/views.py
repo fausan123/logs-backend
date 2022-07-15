@@ -10,7 +10,7 @@ from drf_yasg.utils import swagger_auto_schema
 
 from .models import *
 from subjects.models import Subject
-from .serializers import FeedbackCreateSerializer, FeedbackSubmitSerializer
+from .serializers import FeedbackCreateSerializer, FeedbackSubmitSerializer, FeedbackViewSerializer, FeedbackResponseViewSerializer
 
 class FeedbackCreate(generics.GenericAPIView):
     serializer_class = FeedbackCreateSerializer
@@ -43,3 +43,122 @@ class FeedbackCreate(generics.GenericAPIView):
                 return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+'''
+Checks:
+If Feedback ID is valid : tested
+If account is student : tested
+If student is eligible : to be tested
+'''
+class FeedbackSubmit(generics.GenericAPIView):
+    serializer_class = FeedbackSubmitSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Feedback Submition",
+                         responses={ 201: 'Submitted Successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+    
+    def post(self, request, id):
+        serializer = self.serializer_class(data=request.data)
+
+        if serializer.is_valid():
+            data = serializer.data
+
+            if (not Feedback.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given feedback does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if (not request.user.is_student):
+                return Response({ "Error": "Unauthorized" , "Message": "Only eligible students can submit feedback!"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            feedback = Feedback.objects.get(pk=id)
+            # assumes that student user will have a student profile
+            if (not request.user.student in feedback.subject.students.all()):
+                return Response({ "Error": "Unauthorized" , "Message": "You are not eligible to submit feedback!"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            try:
+                feed_response = FeedbackResponse(student=request.user.student, feedback=feedback, response=data['response'])
+                feed_response.save()
+            except Exception as e:
+                return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+'''
+ID: Subject ID
+Checks:
+If subject ID is valid
+If user is the owner of subject
+If user is faculty (can be assume if above true)
+'''
+class FeedbackList(generics.GenericAPIView):
+    serializer_class = FeedbackViewSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Feedbacks list for a subject",
+                         responses={ 200: 'Data retrieved successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+
+    def get(self, request, id):
+
+        try:
+            if (not Subject.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given subject does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            subject = Subject.objects.get(pk=id)
+
+            # if (request.user.is_student):
+            #         return Response({ "Error": "Unauthorized" , "Message": "Account not faculty !!"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if (request.user != subject.created_by.user):
+                return Response({ "Error": "Unauthorized" , "Message": "User not owner of the subject"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            feedbacks = Feedback.objects.filter(created_by=request.user.faculty, subject=subject)
+            feed_dicts = [f.__dict__ for f in feedbacks]
+
+            serializer = self.serializer_class(data=feed_dicts, many=True)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
+
+'''
+ID: Feedback ID
+Checks:
+If ID is valid
+If user is the one who created the feedback
+'''
+class FeedbackResponseList(generics.GenericAPIView):
+    serializer_class = FeedbackResponseViewSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Feedback responses list for a feedback",
+                         responses={ 200: 'Data retrieved successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+
+    def get(self, request, id):
+
+        try:
+            if (not Feedback.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given feedback does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            feedback = Feedback.objects.get(pk=id)
+
+            if (request.user != feedback.created_by.user):
+                return Response({ "Error": "Unauthorized" , "Message": "User not owner of the feedback"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            feed_responses = FeedbackResponse.objects.filter(feedback=feedback)
+            feedres_dicts = [f.__dict__ for f in feed_responses]
+
+            serializer = self.serializer_class(data=feedres_dicts, many=True)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
