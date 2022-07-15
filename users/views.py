@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from drf_yasg.utils import swagger_auto_schema
 
-from .serializers import FacultyRegisterSerializer, UserLoginSerializer
+from .serializers import FacultyRegisterSerializer, UserLoginSerializer, StudentDetailSerializer
 from .models import User, Faculty
 
 class FacultyRegister(generics.GenericAPIView):
@@ -85,3 +85,36 @@ class StudentLogin(ObtainAuthToken):
         else:
             return Response({"Error": "Unauthorized", "Message": "The account is not a student account !!"}, 
             status=status.HTTP_401_UNAUTHORIZED)
+
+'''
+Gets details of current student user
+User must be student
+ASSUMES that student has a profile created
+ADD subject details later
+'''
+class StudentDetail(generics.GenericAPIView):
+    serializer_class = StudentDetailSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Get details of current student user",
+                         responses={ 200: 'Data retrieved successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+
+    def get(self, request):
+
+        try:
+            if (not request.user.is_student):
+                return Response({"Error": "Unauthorized", "Message": "The account is not a student account !!"}, 
+                    status=status.HTTP_401_UNAUTHORIZED)
+            
+            data = request.user.__dict__
+            data['profile'] = request.user.student.__dict__
+
+            serializer = self.serializer_class(data=data)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)

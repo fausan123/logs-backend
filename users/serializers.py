@@ -18,3 +18,20 @@ class UserLoginSerializer(serializers.ModelSerializer):
         model = User
         fields = ['username', 'password']
 
+class StudentProfileSerializer(serializers.ModelSerializer):
+    admission_number = serializers.IntegerField()
+
+    class Meta:
+        model = Student
+        fields = ['admission_number', 'dob', 'address', 'guardian_name', 'guardian_phonenumber', 'class_name']
+
+class StudentDetailSerializer(serializers.ModelSerializer):
+    #TO ADD subject 
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+    profile = StudentProfileSerializer()
+
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'date_joined', 'email', 'profile']

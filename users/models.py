@@ -25,7 +25,7 @@ class Student(models.Model):
     user = models.OneToOneField(User, related_name="student", on_delete=models.CASCADE)
     dob = models.DateField()
     address = models.TextField()
-    admission_number = models.IntegerField()
+    admission_number = models.IntegerField(unique=True)
     guardian_name = models.CharField(max_length=50)
     guardian_phonenumber = models.CharField(max_length=10)
     class_name = models.CharField(max_length=10)
