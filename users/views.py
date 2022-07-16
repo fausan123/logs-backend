@@ -97,20 +97,29 @@ class StudentDetail(generics.GenericAPIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(operation_description="Get details of current student user",
+    @swagger_auto_schema(operation_description="Get details of current student user, gives user id",
                          responses={ 200: 'Data retrieved successfully',
                                 400: 'Given data is invalid',
                                 401: 'Unauthorized request'})
 
-    def get(self, request):
+    def get(self, request, id):
 
         try:
-            if (not request.user.is_student):
+            if (not User.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given user does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = User.objects.get(pk=id)
+
+            if (not user.is_student):
                 return Response({"Error": "Unauthorized", "Message": "The account is not a student account !!"}, 
                     status=status.HTTP_401_UNAUTHORIZED)
             
-            data = request.user.__dict__
-            data['profile'] = request.user.student.__dict__
+            if (request.user != user and request.user.is_student):
+                return Response({"Error": "Unauthorized", "Message": "The account is not a permitted to view the details !!"}, 
+                    status=status.HTTP_401_UNAUTHORIZED)
+
+            data = user.__dict__
+            data['profile'] = user.student.__dict__
 
             serializer = self.serializer_class(data=data)
             serializer.is_valid(raise_exception=True)

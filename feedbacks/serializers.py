@@ -22,6 +22,9 @@ class FeedbackViewSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "created_on"]
 
 class FeedbackResponseViewSerializer(serializers.ModelSerializer):
+    student_id = serializers.IntegerField()
+    student_name = serializers.CharField()
+
     class Meta:
         model = FeedbackResponse
-        fields = ["response", "submitted_on", "student"] #maybe sentiment later
+        fields = ["response", "submitted_on", "student_id", "student_name"] #maybe sentiment later

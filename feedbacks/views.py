@@ -1,4 +1,3 @@
-from turtle import title
 from rest_framework import status
 from rest_framework import generics
 from rest_framework.response import Response
@@ -10,6 +9,7 @@ from drf_yasg.utils import swagger_auto_schema
 
 from .models import *
 from subjects.models import Subject
+from users.models import Student, User
 from .serializers import FeedbackCreateSerializer, FeedbackSubmitSerializer, FeedbackViewSerializer, FeedbackResponseViewSerializer
 
 class FeedbackCreate(generics.GenericAPIView):
@@ -30,10 +30,11 @@ class FeedbackCreate(generics.GenericAPIView):
             try:
                 if (not Subject.objects.filter(pk=data['subject']).exists()):
                     return Response({ "Error": "Invalid ID" , "Message": "The given subject does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+                
                 subject = Subject.objects.get(pk=data['subject'])
 
-                if (request.user.is_student):
-                    return Response({ "Error": "Unauthorized" , "Message": "Only faculty can create feedback!"}, status=status.HTTP_401_UNAUTHORIZED)
+                if (request.user != subject.created_by.user):
+                    return Response({ "Error": "Unauthorized" , "Message": "User not owner of the subject !"}, status=status.HTTP_401_UNAUTHORIZED)
                 
                 feedback = Feedback(title=data['title'], subject=subject, created_by=request.user.faculty)
                 feedback.save()
@@ -80,6 +81,8 @@ class FeedbackSubmit(generics.GenericAPIView):
             try:
                 feed_response = FeedbackResponse(student=request.user.student, feedback=feedback, response=data['response'])
                 feed_response.save()
+
+                return Response({'Success': "Feedback Submitted Successfully"}, status=status.HTTP_201_CREATED)
             except Exception as e:
                 return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
         else:
@@ -110,13 +113,10 @@ class FeedbackList(generics.GenericAPIView):
             
             subject = Subject.objects.get(pk=id)
 
-            # if (request.user.is_student):
-            #         return Response({ "Error": "Unauthorized" , "Message": "Account not faculty !!"}, status=status.HTTP_401_UNAUTHORIZED)
-
             if (request.user != subject.created_by.user):
                 return Response({ "Error": "Unauthorized" , "Message": "User not owner of the subject"}, status=status.HTTP_401_UNAUTHORIZED)
             
-            feedbacks = Feedback.objects.filter(created_by=request.user.faculty, subject=subject)
+            feedbacks = Feedback.objects.filter(created_by=request.user.faculty, subject=subject).order_by('-created_on')
             feed_dicts = [f.__dict__ for f in feedbacks]
 
             serializer = self.serializer_class(data=feed_dicts, many=True)
@@ -153,8 +153,12 @@ class FeedbackResponseList(generics.GenericAPIView):
             if (request.user != feedback.created_by.user):
                 return Response({ "Error": "Unauthorized" , "Message": "User not owner of the feedback"}, status=status.HTTP_401_UNAUTHORIZED)
             
-            feed_responses = FeedbackResponse.objects.filter(feedback=feedback)
+            feed_responses = FeedbackResponse.objects.filter(feedback=feedback).order_by('-submitted_on')
             feedres_dicts = [f.__dict__ for f in feed_responses]
+            
+            for f in feedres_dicts:
+                s_user = Student.objects.get(pk=f['student_id'])
+                f['student_name'] = f"{s_user.user.first_name} {s_user.user.last_name}"
 
             serializer = self.serializer_class(data=feedres_dicts, many=True)
             serializer.is_valid(raise_exception=True)

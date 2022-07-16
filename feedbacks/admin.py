@@ -13,9 +13,9 @@ class FeedbackAdmin(admin.ModelAdmin):
     ordering = ("-created_on", )
 
 @admin.register(FeedbackResponse)
-class LearningOutcomeAdmin(admin.ModelAdmin):
-    list_display = ("feedback", "student_link", "submitted_on", )
-    list_filter = ("submitted_on", "student", )  # not displaying student filter ?
+class FeedbackResponseAdmin(admin.ModelAdmin):
+    list_display = ("id", "feedback_link", "student_link", "submitted_on", )
+    list_filter = ("submitted_on", "feedback", "student", )
 
     def student_link(self, obj):
         return mark_safe('<a href="{}">{}</a>'.format(
@@ -23,6 +23,12 @@ class LearningOutcomeAdmin(admin.ModelAdmin):
             obj.student.user
         ))
     student_link.short_description = "Student"
-    student_link.filter = True
+
+    def feedback_link(self, obj):
+        return mark_safe('<a href="{}">{}</a>'.format(
+            reverse("admin:feedbacks_feedback_change", args=(obj.feedback.pk,)),
+            obj.feedback
+        ))
+    feedback_link.short_description = "Feedback"
 
     ordering = ("-submitted_on", )   

@@ -36,7 +36,7 @@ class FacultyAdmin(admin.ModelAdmin):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ("admission_number", "user_link", "dob", "guardian_name", "class_name", )
+    list_display = ("id", "admission_number", "user_link", "dob", "guardian_name", "class_name", )
     list_filter = ("class_name", )
 
     def user_link(self, obj):

@@ -17,15 +17,21 @@ class User(AbstractUser):
             return ["is_student"]
         else:
             return []
+    
+    def save(self, *args, **kwargs):
+        #creates a student profile automatically if user is student
+        if self.is_student:
+            student, created = Student.objects.get_or_create(user=self)
+        return super(User, self).save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.first_name} {self.last_name}"
 
 class Student(models.Model):
     user = models.OneToOneField(User, related_name="student", on_delete=models.CASCADE)
-    dob = models.DateField()
+    dob = models.DateField(null=True)
     address = models.TextField()
-    admission_number = models.IntegerField(unique=True)
+    admission_number = models.IntegerField(unique=True, null=True)
     guardian_name = models.CharField(max_length=50)
     guardian_phonenumber = models.CharField(max_length=10)
     class_name = models.CharField(max_length=10)
@@ -35,7 +41,7 @@ class Student(models.Model):
             raise ValidationError("Cannot create a student profile for faculty user !!")
     
     def __str__(self) -> str:
-        return f"Student: {self.user.first_name}"
+        return f"Student: {self.user.first_name} {self.user.last_name}"
 
 class Faculty(models.Model):
     user = models.OneToOneField(User, related_name="faculty", on_delete=models.CASCADE)
@@ -49,9 +55,13 @@ class Faculty(models.Model):
             raise ValidationError("Cannot create a faculty profile for student user !!")
 
     def __str__(self) -> str:
-        return f"Faculty: {self.user.first_name}"
+        return f"Faculty: {self.user.first_name} {self.user.last_name}"
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):
     if created:
         Token.objects.create(user=instance)
+
+        #creates a student profile automatically if user is student
+        if instance.is_student:
+            Student.objects.create(user=instance)
