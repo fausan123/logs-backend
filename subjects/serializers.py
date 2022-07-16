@@ -40,12 +40,66 @@ class StudentViewSerializer(serializers.ModelSerializer):
 class StudentAddSerailizer(serializers.Serializer):
     admission_number = serializers.IntegerField()
 
-# add assessment later
+class AssessmentListSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+
+    class Meta:
+        model = Assessment
+        fields = ['id', 'title', 'description', 'created_on']
+
+
 class SubjectDetailSerailizer(serializers.ModelSerializer):
     learning_outcomes = LOViewSerializer(many=True)
     students = StudentViewSerializer(many=True)
+    assessments = AssessmentListSerializer(many=True)
 
     class Meta:
         model = Subject
-        fields = ['name', 'description', 'created_on', 'learning_outcomes', 'students']
+        fields = ['name', 'description', 'created_on', 'learning_outcomes', 'students', 'assessments']
+
+class QuestionCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssessmentQuestion
+        fields = ['question', 'learningoutcomes']
+
+class AssessmentCreateSerializer(serializers.ModelSerializer):
+    questions = QuestionCreateSerializer(many=True)
+
+    class Meta:
+        model = Assessment
+        fields = ['title', 'description', 'questions']
+
+class QuestionDetailSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+    learningoutcomes = LOViewSerializer(many=True)
+
+    class Meta:
+        model = AssessmentQuestion
+        fields = ['id', 'question', 'learningoutcomes']
+
+class AssessmentResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    user_id = serializers.IntegerField()
+    admission_number = serializers.IntegerField()
+    marks = serializers.IntegerField()
+    submitted_on = serializers.DateTimeField()
+
+class AssessmentDetailSerializer(serializers.ModelSerializer):
+    questions = QuestionDetailSerializer(many=True)
+    responses = AssessmentResponseSerializer(many=True)
+
+    class Meta:
+        model = Assessment
+        fields = ['title', 'description', 'created_on', 'questions', 'responses']
+
+class QASerializer(serializers.ModelSerializer):
+    class Meta:
+        model = QAGrade
+        fields = ['question', 'mark']
+
+class AssessmentSubmitSerializer(serializers.Serializer):
+    admission_number = serializers.IntegerField()
+    questions = QASerializer(many=True)
+
+
 

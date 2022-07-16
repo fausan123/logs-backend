@@ -5,8 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 
 from drf_yasg.utils import swagger_auto_schema
 
-from .models import Subject, LearningOutcome
-from .serializers import StudentAddSerailizer, SubjectCreateSerializer, LOCreateSerializer, SubjectDetailSerailizer, SubjectListSerializer
+from .models import Assessment, AssessmentQuestion, AssessmentSubmission, QAGrade, Subject, LearningOutcome
+from .serializers import AssessmentCreateSerializer, AssessmentDetailSerializer, AssessmentSubmitSerializer, StudentAddSerailizer, SubjectCreateSerializer, LOCreateSerializer, SubjectDetailSerailizer, SubjectListSerializer
 from users.models import Student
 
 '''
@@ -146,7 +146,8 @@ class SubjectDetail(generics.GenericAPIView):
             
             sub_dict = subject.__dict__
 
-            sub_dict['learning_outcomes']  = [lo.__dict__ for lo in LearningOutcome.objects.filter(subject=subject)]
+            sub_dict['learning_outcomes']  = [lo.__dict__ for lo in LearningOutcome.objects.filter(subject=subject).order_by('-created_on')]
+            sub_dict['assessments'] = [ass.__dict__ for ass in Assessment.objects.filter(subject=subject).order_by('-created_on')]
 
             students = list()
             for s in subject.students.all():
@@ -206,3 +207,168 @@ class SubjectStudentAdd(generics.GenericAPIView):
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+'''
+Assessment Creation
+Checks:
+If subject id is valid
+If user owner of subject
+'''
+class AssessmentCreate(generics.GenericAPIView):
+    serializer_class = AssessmentCreateSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Create an assessment for a subject",
+                         responses={ 201: 'Created Successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+    
+    def post(self, request, id):
+        serializer = self.serializer_class(data=request.data)
+
+        if serializer.is_valid():
+            data = serializer.data
+
+            if (not Subject.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given subject does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+
+            subject = Subject.objects.get(pk=id)
+
+            if (request.user != subject.created_by.user):
+                return Response({ "Error": "Unauthorized" , "Message": "User not owner of the subject"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            try:
+                assessment = Assessment(title=data['title'], description=data['description'], subject=subject)
+                assessment.save()
+
+                try:
+
+                    for question in data['questions']:
+                        ques = AssessmentQuestion(question=question['question'], assessment=assessment)
+                        ques.save()
+                        ques.learningoutcomes.add(*question['learningoutcomes'])
+                
+                except Exception as e:
+                    assessment.delete()
+                    return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_400_BAD_REQUEST)  
+
+                return Response({'Success': "Assessment created successfully"}, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_400_BAD_REQUEST)    
+
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+'''
+Assessment Detail API:
+Checks:
+Check if assessment id is valid
+If user is owner of subject
+'''
+class AssessmentDetail(generics.GenericAPIView):
+    serializer_class = AssessmentDetailSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Assessment Detail",
+                         responses={ 200: 'Data Retrieved Successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+
+    def get(self, request, id):
+
+        try:
+            if (not Assessment.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given assessment does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+
+            assessment = Assessment.objects.get(pk=id)
+
+            if (request.user != assessment.subject.created_by.user):
+                return Response({ "Error": "Unauthorized" , "Message": "User not owner of the subject"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            a_dict = assessment.__dict__
+
+            questions = list()
+            for question in assessment.questions.all():
+                q_dict = question.__dict__
+                q_dict['learningoutcomes'] = [lo.__dict__ for lo in question.learningoutcomes.all()]
+                questions.append(q_dict)
+            a_dict['questions'] = questions
+
+            responses = list()
+            for res in AssessmentSubmission.objects.filter(assessment=assessment).order_by('-submitted_on'):
+                r_dict = res.__dict__
+                r_dict['marks'] = sum(qa.mark for qa in QAGrade.objects.filter(submission=res))
+                r_dict['id'] = res.id
+                r_dict['user_id'] = res.student.user.id
+                r_dict['admission_number'] = res.student.admission_number
+                responses.append(r_dict)
+            a_dict['responses'] = responses
+                        
+            serializer = self.serializer_class(data=a_dict)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
+
+'''
+Assessment Submission API
+Check:
+If Assessment id is valid
+If admission number is valid
+If student member of subject
+If user owner of subject
+'''
+class AssessmentSubmit(generics.GenericAPIView):
+    serializer_class = AssessmentSubmitSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Submit an assessment for a subject using admission number",
+                         responses={ 201: 'Submitted Successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+    
+    def post(self, request, id):
+        serializer = self.serializer_class(data=request.data)
+
+        if serializer.is_valid():
+            data = serializer.data
+
+            if (not Assessment.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given assessment does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if (not Student.objects.filter(admission_number=data['admission_number']).exists()):
+                return Response({ "Error": "Invalid Admission Number" , "Message": "The given admission number is invalid !"}, status=status.HTTP_400_BAD_REQUEST)
+
+            student = Student.objects.get(admission_number=data['admission_number'])
+            assessment = Assessment.objects.get(pk=id)
+
+            if (student not in assessment.subject.students.all()):
+                return Response({ "Error": "Unauthorized" , "Message": "Student not added to subject"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if (request.user != assessment.subject.created_by.user):
+                return Response({ "Error": "Unauthorized" , "Message": "User not owner of the subject"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            try:
+                submission = AssessmentSubmission(student=student, assessment=assessment)
+                submission.save()
+
+                try:
+
+                    for question in data['questions']:
+                        ques = AssessmentQuestion.objects.get(pk=question['question'])
+                        qa = QAGrade(question=ques, mark=question['mark'], submission=submission)
+                        qa.save()
+                
+                except Exception as e:
+                    submission.delete()
+                    return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_400_BAD_REQUEST)  
+
+                return Response({'Success': "Assessment submitted successfully"}, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_400_BAD_REQUEST)    
+
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
