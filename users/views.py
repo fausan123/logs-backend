@@ -9,7 +9,8 @@ from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 
 from .serializers import FacultyRegisterSerializer, UserLoginSerializer, StudentDetailSerializer
-from .models import User, Faculty
+from .models import User, Faculty, Student
+from subjects.models import QAGrade, Subject, LearningOutcome
 
 class FacultyRegister(generics.GenericAPIView):
     serializer_class = FacultyRegisterSerializer
@@ -120,6 +121,37 @@ class StudentDetail(generics.GenericAPIView):
 
             data = user.__dict__
             data['profile'] = user.student.__dict__
+
+            subjects = list()
+            for sub in user.student.subjects.all():
+                s_dict = sub.__dict__
+                s_dict['learning_outcomes']  = [lo.__dict__ for lo in LearningOutcome.objects.filter(subject=sub).order_by('-created_on')]
+                
+                assessments = list()
+                for ass in sub.assessments.all().order_by('-created_on'):
+                    a_dict = ass.__dict__
+                    if (ass.submissions.filter(student=user.student).exists()):
+                        submission = ass.submissions.get(student=user.student)
+                        a_dict['submitted_on'] = submission.submitted_on
+                        
+                        qas = list()
+                        for qa in submission.assessment.questions.all():
+                            qa_dict = qa.__dict__
+                            qa_dict['learning_outcomes'] = [lo.__dict__ for lo in qa.learningoutcomes.all()]
+                            if (qa.qagrades.filter(submission=submission).exists()):
+                                qa_dict['mark'] = qa.qagrades.get(submission=submission).mark
+                            else:
+                                qa_dict['mark'] = 0
+                            qas.append(qa_dict)
+                        a_dict['response'] = qas
+                    else:
+                        a_dict['submitted_on'] = None
+                        a_dict['response'] = []
+                    assessments.append(a_dict)
+
+                s_dict['assessments'] = assessments                       
+                subjects.append(s_dict)
+            data['subjects'] = subjects
 
             serializer = self.serializer_class(data=data)
             serializer.is_valid(raise_exception=True)
