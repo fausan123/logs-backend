@@ -100,6 +100,16 @@ class QASerializer(serializers.ModelSerializer):
 class AssessmentSubmitSerializer(serializers.Serializer):
     admission_number = serializers.IntegerField()
     questions = QASerializer(many=True)
+    
+class AssessmentProgressGraphSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    mark = serializers.IntegerField()
 
+class LOImproveSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    mark = serializers.IntegerField()
 
-
+class LOSuggestSerializer(serializers.Serializer):
+    question = serializers.CharField()

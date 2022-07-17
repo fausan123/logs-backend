@@ -1,3 +1,4 @@
+from django.forms import ValidationError
 from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.authentication import TokenAuthentication
@@ -6,8 +7,9 @@ from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 
 from .models import Assessment, AssessmentQuestion, AssessmentSubmission, QAGrade, Subject, LearningOutcome
-from .serializers import AssessmentCreateSerializer, AssessmentDetailSerializer, AssessmentSubmitSerializer, StudentAddSerailizer, SubjectCreateSerializer, LOCreateSerializer, SubjectDetailSerailizer, SubjectListSerializer
+from .serializers import AssessmentCreateSerializer, AssessmentDetailSerializer, AssessmentProgressGraphSerializer, AssessmentSubmitSerializer, LOImproveSerializer, LOSuggestSerializer, StudentAddSerailizer, SubjectCreateSerializer, LOCreateSerializer, SubjectDetailSerailizer, SubjectListSerializer
 from users.models import Student
+from .utils import suggest_lo
 
 '''
 Subject create
@@ -359,14 +361,172 @@ class AssessmentSubmit(generics.GenericAPIView):
 
                     for question in data['questions']:
                         ques = AssessmentQuestion.objects.get(pk=question['question'])
-                        qa = QAGrade(question=ques, mark=question['mark'], submission=submission)
-                        qa.save()
+                        if (ques.assessment != assessment):
+                            raise ValidationError("Question ID does not belong to the given subject !")
+                        else:
+                            qa = QAGrade(question=ques, mark=question['mark'], submission=submission)
+                            qa.save()
                 
                 except Exception as e:
                     submission.delete()
                     return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_400_BAD_REQUEST)  
 
                 return Response({'Success': "Assessment submitted successfully"}, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_400_BAD_REQUEST)    
+
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+'''
+Generate a graph data for each student for each subject
+Inputs admission number and gives subject id as param
+Checks:
+Subject ID
+Admission Number
+If user is faculty / is the owner of profile
+If admission number part of profile
+'''
+class ProgressGraph(generics.GenericAPIView):
+    serializer_class = AssessmentProgressGraphSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Assessment Progress Graph Data for each student by admission number",
+                         responses={ 200: 'Data Retrieved Successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+
+    def get(self, request, id, adm_num):
+
+        try:
+            if (not Subject.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given subject does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+
+            subject = Subject.objects.get(pk=id)
+
+            if (not Student.objects.filter(admission_number=adm_num).exists()):
+                return Response({ "Error": "Invalid Admission Number" , "Message": "The given admission number is invalid !"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            student = Student.objects.get(admission_number=adm_num)
+
+            if (student not in subject.students.all()):
+                return Response({ "Error": "Unauthorized" , "Message": "Student not added to subject"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if (request.user.is_student and request.user != student.user):
+                return Response({ "Error": "Unauthorized" , "Message": "User not authorized to view progress"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            res = list()
+            for sub in AssessmentSubmission.objects.filter(student=student, assessment__subject=subject).order_by('submitted_on'):
+                ass = sub.assessment.__dict__
+                ass['mark'] = sum(qa.mark for qa in QAGrade.objects.filter(submission=sub))
+                res.append(ass)
+
+            serializer = self.serializer_class(data=res, many=True)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
+
+
+'''
+Suggest LO for each student for each subject
+Inputs admission number and gives subject id as param
+Checks:
+Subject ID
+Admission Number
+If user is faculty / is the owner of profile
+If admission number part of profile
+'''
+class LOImprove(generics.GenericAPIView):
+    serializer_class = LOImproveSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Learning Outcomes to be improved for each student for each subject",
+                         responses={ 200: 'Data Retrieved Successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+
+    def get(self, request, id, adm_num):
+
+        try:
+            if (not Subject.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given subject does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+
+            subject = Subject.objects.get(pk=id)
+
+            if (not Student.objects.filter(admission_number=adm_num).exists()):
+                return Response({ "Error": "Invalid Admission Number" , "Message": "The given admission number is invalid !"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            student = Student.objects.get(admission_number=adm_num)
+
+            if (student not in subject.students.all()):
+                return Response({ "Error": "Unauthorized" , "Message": "Student not added to subject"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if (request.user.is_student and request.user != student.user):
+                return Response({ "Error": "Unauthorized" , "Message": "User not authorized to view progress"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            res = list()
+            for lo in LearningOutcome.objects.filter(subject=subject):
+                for q in lo.questions.all():
+                    if q.qagrades.filter(submission__student=student).exists():
+                        if lo.id in [k['id'] for k in res]:
+                            ind = next((index for (index, d) in enumerate(res) if d['id'] == lo.id), None)
+                            res[ind]['mark'] += sum(qa.mark for qa in q.qagrades.filter(submission__student=student))
+                        else:
+                            lo_dict = lo.__dict__
+                            lo_dict['mark'] = sum(qa.mark for qa in q.qagrades.filter(submission__student=student))
+                            res.append(lo_dict)
+            
+            res = sorted(res, key=lambda k: k['mark'])
+
+            serializer = self.serializer_class(data=res, many=True)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
+
+'''
+Suggest LOs for a question based on LOs of the given subject
+Checks:
+If subject ID is valid
+'''
+class LOSuggest(generics.GenericAPIView):
+    serializer_class = LOSuggestSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Learning Outcomes Suggestion",
+                         responses={ 200: 'Data Retrieved Successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+    
+    def post(self, request, id):
+        serializer = self.serializer_class(data=request.data)
+
+        if serializer.is_valid():
+            question = serializer.data['question']
+
+            if (not Subject.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given subject does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+
+            subject = Subject.objects.get(pk=id)
+
+            if (request.user != subject.created_by.user):
+                return Response({ "Error": "Unauthorized" , "Message": "User not owner of the subject"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            try:
+                los = [lo.name for lo in LearningOutcome.objects.filter(subject=subject)]
+                los.insert(0, question)
+                if len(los) > 1:
+                    lo = suggest_lo(los)
+                else:
+                    lo = None
+                return Response({'Success': "Data Obtained Successfully", "Data": lo}, status=status.HTTP_201_CREATED)
             except Exception as e:
                 return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_400_BAD_REQUEST)    
 

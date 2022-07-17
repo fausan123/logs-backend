@@ -81,7 +81,8 @@ class StudentLogin(ObtainAuthToken):
                 'first_name': user.first_name,
                 'last_name': user.last_name,
                 'username': user.username,
-                'email': user.email
+                'email': user.email,
+                'admission_number': user.student.admission_number
             }, status=status.HTTP_200_OK)
         else:
             return Response({"Error": "Unauthorized", "Message": "The account is not a student account !!"}, 
