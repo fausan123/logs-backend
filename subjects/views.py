@@ -1,3 +1,4 @@
+from multiprocessing import AuthenticationError
 from django.forms import ValidationError
 from rest_framework import status, generics
 from rest_framework.response import Response
@@ -10,6 +11,7 @@ from .models import Assessment, AssessmentQuestion, AssessmentSubmission, QAGrad
 from .serializers import AssessmentCreateSerializer, AssessmentDetailSerializer, AssessmentProgressGraphSerializer, AssessmentSubmitSerializer, LOImproveSerializer, LOSuggestSerializer, StudentAddSerailizer, SubjectCreateSerializer, LOCreateSerializer, SubjectDetailSerailizer, SubjectListSerializer
 from users.models import Student
 from .utils import suggest_lo
+
 
 '''
 Subject create
@@ -520,10 +522,11 @@ class LOSuggest(generics.GenericAPIView):
                 return Response({ "Error": "Unauthorized" , "Message": "User not owner of the subject"}, status=status.HTTP_401_UNAUTHORIZED)
 
             try:
-                los = [lo.name for lo in LearningOutcome.objects.filter(subject=subject)]
-                los.insert(0, question)
+                los = [{'name': lo.name, 'id': lo.id} for lo in LearningOutcome.objects.filter(subject=subject)]
+                los_names = [lo['name'] for lo in los]
+                los_names.insert(0, question)
                 if len(los) > 1:
-                    lo = suggest_lo(los)
+                    lo = los[suggest_lo(los_names)]
                 else:
                     lo = None
                 return Response({'Success': "Data Obtained Successfully", "Data": lo}, status=status.HTTP_201_CREATED)
