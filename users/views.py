@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from drf_yasg.utils import swagger_auto_schema
 
-from .serializers import FacultyRegisterSerializer, UserLoginSerializer, StudentDetailSerializer
+from .serializers import FacultyDetailSerializer, FacultyRegisterSerializer, UserLoginSerializer, StudentDetailSerializer
 from .models import User, Faculty, Student
 from subjects.models import QAGrade, Subject, LearningOutcome
 
@@ -89,10 +89,36 @@ class StudentLogin(ObtainAuthToken):
             status=status.HTTP_401_UNAUTHORIZED)
 
 '''
+A common login for all users
+'''
+class UserLogin(ObtainAuthToken):
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data,
+                                           context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        if user.is_superuser or user.is_approved:
+            token, created = Token.objects.get_or_create(user=user)
+            return Response({
+                'token': token.key,
+                'user_id': user.pk,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'username': user.username,
+                'email': user.email,
+                'is_admin': user.is_superuser,
+                'is_student': user.is_student,
+                'date_joined': user.date_joined
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({"Error": "Unauthorized", "Message": "The account has not been approved yet !"}, 
+            status=status.HTTP_401_UNAUTHORIZED)
+
+'''
 Gets details of current student user
 User must be student
 ASSUMES that student has a profile created
-ADD subject details later
 '''
 class StudentDetail(generics.GenericAPIView):
     serializer_class = StudentDetailSerializer
@@ -150,9 +176,65 @@ class StudentDetail(generics.GenericAPIView):
                         a_dict['response'] = []
                     assessments.append(a_dict)
 
-                s_dict['assessments'] = assessments                       
+                s_dict['assessments'] = assessments  
+
+                feedbacks = list()
+                for feed in sub.feedbacks.all().order_by('-created_on'):
+                    f_dict = feed.__dict__
+                    if (feed.responses.filter(student=user.student).exists()):
+                        response = feed.responses.get(student=user.student)
+                        f_dict['submitted_on'] = response.submitted_on
+                        f_dict['response'] = response.response
+                    else:
+                        f_dict['submitted_on'] = None
+                        f_dict['response'] = None
+                    feedbacks.append(f_dict)
+                
+                s_dict['feedbacks'] = feedbacks
+
                 subjects.append(s_dict)
             data['subjects'] = subjects
+
+            serializer = self.serializer_class(data=data)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
+
+'''
+Gets details of current faculty user
+User must be faculty
+ASSUMES that faculty has a profile created
+'''
+class FacultyDetail(generics.GenericAPIView):
+    serializer_class = FacultyDetailSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Get details of current faculty user, gives user id",
+                         responses={ 200: 'Data retrieved successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+
+    def get(self, request, id):
+
+        try:
+            if (not User.objects.filter(pk=id).exists()):
+                return Response({ "Error": "Invalid ID" , "Message": "The given user does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = User.objects.get(pk=id)
+
+            if (user.is_student or user.is_superuser):
+                return Response({"Error": "Unauthorized", "Message": "The account is a faculty account !!"}, 
+                    status=status.HTTP_401_UNAUTHORIZED)
+            
+            if (request.user != user and not request.user.is_superuser):
+                return Response({"Error": "Unauthorized", "Message": "The account is not a permitted to view the details !!"}, 
+                    status=status.HTTP_401_UNAUTHORIZED)
+            
+            data = user.faculty.__dict__
+            data['id'] = user.id
 
             serializer = self.serializer_class(data=data)
             serializer.is_valid(raise_exception=True)

@@ -49,7 +49,7 @@ class FeedbackCreate(generics.GenericAPIView):
 Checks:
 If Feedback ID is valid : tested
 If account is student : tested
-If student is eligible : to be tested
+If student is eligible : tested
 '''
 class FeedbackSubmit(generics.GenericAPIView):
     serializer_class = FeedbackSubmitSerializer
@@ -71,7 +71,7 @@ class FeedbackSubmit(generics.GenericAPIView):
                 return Response({ "Error": "Invalid ID" , "Message": "The given feedback does not exist!"}, status=status.HTTP_400_BAD_REQUEST)
             
             if (not request.user.is_student):
-                return Response({ "Error": "Unauthorized" , "Message": "Only eligible students can submit feedback!"}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({ "Error": "Unauthorized" , "Message": "Only students can submit feedback!"}, status=status.HTTP_401_UNAUTHORIZED)
 
             feedback = Feedback.objects.get(pk=id)
             # assumes that student user will have a student profile
@@ -100,7 +100,7 @@ class FeedbackList(generics.GenericAPIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(operation_description="Feedbacks list for a subject",
+    @swagger_auto_schema(operation_description="Feedbacks list for a subject, parameter is subject id",
                          responses={ 200: 'Data retrieved successfully',
                                 400: 'Given data is invalid',
                                 401: 'Unauthorized request'})

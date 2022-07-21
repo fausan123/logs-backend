@@ -21,5 +21,8 @@ class FeedbackResponse(models.Model):
     submitted_on = models.DateTimeField(default=timezone.now)
     # TODO: Add a sentiment field, preferably a boolean
 
+    class Meta:
+        unique_together = ('student', 'feedback')
+
     def __str__(self) -> str:
         return f"{self.feedback} - {self.response}"

@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import User, Student, Faculty
 from subjects.models import Subject, Assessment
-from subjects.serializers import LOViewSerializer, AssessmentListSerializer
+from subjects.serializers import LOViewSerializer
+from feedbacks.serializers import Feedback
 
 class FacultyProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -42,13 +43,24 @@ class StudentAssessmentSerializer(serializers.ModelSerializer):
         model = Assessment
         fields = ['id', 'title', 'description', 'created_on', 'submitted_on', 'response']
 
+class StudentFeedbackSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+    response = serializers.CharField(allow_null=True)
+    submitted_on = serializers.DateTimeField(allow_null=True)
+
+    class Meta:
+        model = Feedback
+        fields = ['id', 'title', 'created_on', 'response', 'submitted_on']
+
 class StudentSubjectSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
     learning_outcomes = LOViewSerializer(many=True)
-    assessments = StudentAssessmentSerializer(many=True) 
+    assessments = StudentAssessmentSerializer(many=True)
+    feedbacks =  StudentFeedbackSerializer(many=True)
 
     class Meta:
         model = Subject
-        fields = fields = ['name', 'description', 'created_on', 'learning_outcomes', 'assessments']
+        fields = fields = ['id', 'name', 'description', 'created_on', 'learning_outcomes', 'assessments', 'feedbacks']
 
 class StudentDetailSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField()
@@ -59,3 +71,10 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'date_joined', 'email', 'profile', 'subjects']
+
+class FacultyDetailSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+
+    class Meta:
+        model = Faculty
+        fields = ['id', 'dob', 'address', 'phonenumber', 'position']

@@ -1,4 +1,3 @@
-from multiprocessing import AuthenticationError
 from django.forms import ValidationError
 from rest_framework import status, generics
 from rest_framework.response import Response
