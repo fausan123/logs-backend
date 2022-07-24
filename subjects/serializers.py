@@ -4,6 +4,8 @@ from users.models import User
 from .models import *
 
 class SubjectCreateSerializer(serializers.ModelSerializer):
+    description = serializers.CharField(allow_blank=True)
+
     class Meta:
         model = Subject
         fields = ['name', 'description']
@@ -15,6 +17,7 @@ class LOCreateSerializer(serializers.ModelSerializer):
 
 class SubjectListSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField()
+    description = serializers.CharField(allow_blank=True)
 
     class Meta:
         model = Subject
@@ -42,6 +45,7 @@ class StudentAddSerailizer(serializers.Serializer):
 
 class AssessmentListSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField()
+    description = serializers.CharField(allow_blank=True)
 
     class Meta:
         model = Assessment
@@ -49,6 +53,7 @@ class AssessmentListSerializer(serializers.ModelSerializer):
 
 
 class SubjectDetailSerailizer(serializers.ModelSerializer):
+    description = serializers.CharField(allow_blank=True)
     learning_outcomes = LOViewSerializer(many=True)
     students = StudentViewSerializer(many=True)
     assessments = AssessmentListSerializer(many=True)
@@ -63,6 +68,7 @@ class QuestionCreateSerializer(serializers.ModelSerializer):
         fields = ['question', 'learningoutcomes']
 
 class AssessmentCreateSerializer(serializers.ModelSerializer):
+    description = serializers.CharField(allow_blank=True)
     questions = QuestionCreateSerializer(many=True)
 
     class Meta:
@@ -85,6 +91,7 @@ class AssessmentResponseSerializer(serializers.Serializer):
     submitted_on = serializers.DateTimeField()
 
 class AssessmentDetailSerializer(serializers.ModelSerializer):
+    description = serializers.CharField(allow_blank=True)
     questions = QuestionDetailSerializer(many=True)
     responses = AssessmentResponseSerializer(many=True)
 

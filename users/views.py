@@ -203,11 +203,11 @@ class StudentDetail(generics.GenericAPIView):
             return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
 
 '''
-Gets details of current faculty user
+Gets details of current faculty user, input id
 User must be faculty
 ASSUMES that faculty has a profile created
 '''
-class FacultyDetail(generics.GenericAPIView):
+class FacultyDetailID(generics.GenericAPIView):
     serializer_class = FacultyDetailSerializer
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -233,8 +233,42 @@ class FacultyDetail(generics.GenericAPIView):
                 return Response({"Error": "Unauthorized", "Message": "The account is not a permitted to view the details !!"}, 
                     status=status.HTTP_401_UNAUTHORIZED)
             
-            data = user.faculty.__dict__
-            data['id'] = user.id
+            data = user.__dict__
+            data['profile'] = user.faculty.__dict__
+
+            serializer = self.serializer_class(data=data)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
+
+'''
+Gets details of current faculty user, not input id
+User must be faculty
+ASSUMES that faculty has a profile created
+'''
+class FacultyDetail(generics.GenericAPIView):
+    serializer_class = FacultyDetailSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Get details of current logged in faculty user",
+                         responses={ 200: 'Data retrieved successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+
+    def get(self, request):
+
+        try:
+            user = request.user
+
+            if (user.is_student or user.is_superuser):
+                return Response({"Error": "Unauthorized", "Message": "The account is a faculty account !!"}, 
+                    status=status.HTTP_401_UNAUTHORIZED)
+            
+            data = user.__dict__
+            data['profile'] = user.faculty.__dict__
 
             serializer = self.serializer_class(data=data)
             serializer.is_valid(raise_exception=True)

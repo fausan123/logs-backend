@@ -36,6 +36,7 @@ class StudentQuestionsSerializer(serializers.Serializer):
 
 class StudentAssessmentSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField()
+    description = serializers.CharField(allow_blank=True)
     submitted_on = serializers.DateTimeField(allow_null=True)
     response = StudentQuestionsSerializer(many=True)
 
@@ -54,6 +55,7 @@ class StudentFeedbackSerializer(serializers.ModelSerializer):
 
 class StudentSubjectSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField()
+    description = serializers.CharField(allow_blank=True)
     learning_outcomes = LOViewSerializer(many=True)
     assessments = StudentAssessmentSerializer(many=True)
     feedbacks =  StudentFeedbackSerializer(many=True)
@@ -74,7 +76,9 @@ class StudentDetailSerializer(serializers.ModelSerializer):
 
 class FacultyDetailSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField()
+    username = serializers.CharField()
+    profile = FacultyProfileSerializer()
 
     class Meta:
-        model = Faculty
-        fields = ['id', 'dob', 'address', 'phonenumber', 'position']
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'date_joined', 'email', 'profile']
