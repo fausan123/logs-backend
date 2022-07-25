@@ -116,11 +116,11 @@ class UserLogin(ObtainAuthToken):
             status=status.HTTP_401_UNAUTHORIZED)
 
 '''
-Gets details of current student user
+Gets details of current student user, input id
 User must be student
 ASSUMES that student has a profile created
 '''
-class StudentDetail(generics.GenericAPIView):
+class StudentDetailID(generics.GenericAPIView):
     serializer_class = StudentDetailSerializer
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -145,6 +145,86 @@ class StudentDetail(generics.GenericAPIView):
             if (request.user != user and request.user.is_student):
                 return Response({"Error": "Unauthorized", "Message": "The account is not a permitted to view the details !!"}, 
                     status=status.HTTP_401_UNAUTHORIZED)
+
+            data = user.__dict__
+            data['profile'] = user.student.__dict__
+
+            subjects = list()
+            for sub in user.student.subjects.all():
+                s_dict = sub.__dict__
+                s_dict['learning_outcomes']  = [lo.__dict__ for lo in LearningOutcome.objects.filter(subject=sub).order_by('-created_on')]
+                
+                assessments = list()
+                for ass in sub.assessments.all().order_by('-created_on'):
+                    a_dict = ass.__dict__
+                    if (ass.submissions.filter(student=user.student).exists()):
+                        submission = ass.submissions.get(student=user.student)
+                        a_dict['submitted_on'] = submission.submitted_on
+                        
+                        qas = list()
+                        for qa in submission.assessment.questions.all():
+                            qa_dict = qa.__dict__
+                            qa_dict['learning_outcomes'] = [lo.__dict__ for lo in qa.learningoutcomes.all()]
+                            if (qa.qagrades.filter(submission=submission).exists()):
+                                qa_dict['mark'] = qa.qagrades.get(submission=submission).mark
+                            else:
+                                qa_dict['mark'] = 0
+                            qas.append(qa_dict)
+                        a_dict['response'] = qas
+                    else:
+                        a_dict['submitted_on'] = None
+                        a_dict['response'] = []
+                    assessments.append(a_dict)
+
+                s_dict['assessments'] = assessments  
+
+                feedbacks = list()
+                for feed in sub.feedbacks.all().order_by('-created_on'):
+                    f_dict = feed.__dict__
+                    if (feed.responses.filter(student=user.student).exists()):
+                        response = feed.responses.get(student=user.student)
+                        f_dict['submitted_on'] = response.submitted_on
+                        f_dict['response'] = response.response
+                    else:
+                        f_dict['submitted_on'] = None
+                        f_dict['response'] = None
+                    feedbacks.append(f_dict)
+                
+                s_dict['feedbacks'] = feedbacks
+
+                subjects.append(s_dict)
+            data['subjects'] = subjects
+
+            serializer = self.serializer_class(data=data)
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({ "Error": type(e).__name__ , "Message": str(e)}, status=status.HTTP_409_CONFLICT)
+
+'''
+Gets details of current student user
+User must be student
+ASSUMES that student has a profile created
+'''
+class StudentDetail(generics.GenericAPIView):
+    serializer_class = StudentDetailSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(operation_description="Get details of currently logged in student user",
+                         responses={ 200: 'Data retrieved successfully',
+                                400: 'Given data is invalid',
+                                401: 'Unauthorized request'})
+
+    def get(self, request):
+
+        try:
+            user = request.user
+
+            if (not user.is_student):
+                return Response({"Error": "Unauthorized", "Message": "The account is not a student account !!"}, 
+                    status=status.HTTP_401_UNAUTHORIZED)  
 
             data = user.__dict__
             data['profile'] = user.student.__dict__
